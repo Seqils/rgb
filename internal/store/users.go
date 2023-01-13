@@ -1,13 +1,16 @@
 package store
 
 import (
+	"context"
 	"crypto/rand"
 	// "errors"
 	// "fmt"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
+	// "github.com/gin-gonic/gin"
+	"github.com/go-pg/pg/v10"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type User struct {
@@ -18,9 +21,18 @@ type User struct {
 	Salt           []byte `json:"-"`
 	CreatedAt      time.Time
 	ModifiedAt     time.Time
+	Posts          []*Post `json:"-" pg:"fk:user_id,rel:has-many,on_delete:CASCADE"`
 }
 
 var Users []*User
+var _ pg.AfterSelectHook = (*User)(nil)
+
+func (user *User) AfterSelect(ctx context.Context) error {
+	if user.Posts == nil {
+		user.Posts = []*Post{}
+	}
+	return nil
+}
 
 func AddUser(user *User) error {
 	salt, err := GenerateSalt()
@@ -62,4 +74,15 @@ func GenerateSalt() ([]byte, error) {
 		return nil, err
 	}
 	return salt, nil
+}
+
+func FetchUser(id int) (*User, error) {
+	user := new(User)
+	user.ID = id
+	err := db.Model(user).Returning("*").WherePK().Select()
+	if err != nil {
+		log.Error().Err(err).Msg("Error fetching user")
+		return nil, err
+	}
+	return user, nil
 }
